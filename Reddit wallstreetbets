@@ -1,0 +1,46 @@
+!pip install praw
+import praw
+import pandas as pd
+ 
+reddit_read_only = praw.Reddit(client_id="M0Z62D5uXeXVNWoWnshPuQ",        
+                               client_secret="FIHNopQDG7RDM8S-1vc_CabEKmjxKA",     
+                               user_agent="Fuzzy_Protection7290")        
+ 
+ 
+subreddit = reddit_read_only.subreddit("wallstreetbets")
+ 
+print("Display Name:", subreddit.display_name)
+
+print("Title:", subreddit.title)
+
+print("Description:", subreddit.description)
+
+subreddit = reddit_read_only.subreddit("wallstreetbets")
+ 
+for post in subreddit.hot(limit=5):
+    print(post.title)
+    print()
+    
+posts = subreddit.top("day")
+#day for today
+#month for this month
+posts_dict = {"Title": [], "Post Text": [],
+              "ID": [], "Score": [],
+              "Total Comments": [], "Post URL": []
+              }
+ 
+ for post in posts:
+    posts_dict["Title"].append(post.title)
+     
+    posts_dict["Post Text"].append(post.selftext)
+     
+    posts_dict["ID"].append(post.id)
+     
+    posts_dict["Score"].append(post.score)
+     
+    posts_dict["Total Comments"].append(post.num_comments)
+ 
+    posts_dict["Post URL"].append(post.url)
+    
+top_posts = pd.DataFrame(posts_dict)
+top_posts
