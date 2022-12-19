@@ -7,40 +7,128 @@ reddit_read_only = praw.Reddit(client_id="",
                                user_agent="")        
  
  
-subreddit = reddit_read_only.subreddit("wallstreetbets")
- 
-print("Display Name:", subreddit.display_name)
+subreddit = reddit_read_only.subreddit('wallstreetbets')
 
-print("Title:", subreddit.title)
+list1 = []
+list2 = []
+list3 = []
+list4 = []
 
-print("Description:", subreddit.description)
-
-subreddit = reddit_read_only.subreddit("wallstreetbets")
- 
-for post in subreddit.hot(limit=5):
-    print(post.title)
-    print()
+for post in subreddit.top('day'):
+    words = post.title.split()
+    cashtags = list(set(filter(lambda word: word.lower().startswith('$'), words)))
     
-posts = subreddit.top("day")
-#day for today
-#month for this month
-posts_dict = {"Title": [], "Post Text": [],
-              "ID": [], "Score": [],
-              "Total Comments": [], "Post URL": []
-              }
- 
- for post in posts:
-    posts_dict["Title"].append(post.title)
-     
-    posts_dict["Post Text"].append(post.selftext)
-     
-    posts_dict["ID"].append(post.id)
-     
-    posts_dict["Score"].append(post.score)
-     
-    posts_dict["Total Comments"].append(post.num_comments)
- 
-    posts_dict["Post URL"].append(post.url)
+    if len(cashtags) > 0:
+        list1.append(post.title)
+        list2.append(post.url)  
+        list3.append(post.score)
+        list4.append(post.num_comments)
+
+df = pd.DataFrame(list(zip(list1,list2,list3,list4)),
+                  columns = ['title','url','score','total comments'])
+df
+df.to_csv('top_posts.csv')
+df.url[0]
+url = df.url[0]
+submission = reddit_read_only.submission(url=url)
+from praw.models import MoreComments
+post_comments = []
+
+for comments in submission.comments:
+    if type(comments) == MoreComments:
+        continue
+        
+    post_comments.append(comments.body)
+
+comments_df = pd.DataFrame(post_comments, columns=['comment'])
+comments_df.to_csv('comment_01.csv')
+
+import nltk
+nltk.download()
+nltk.download([
+     "stopwords",
+     "state_union",
+     "twitter_samples",
+     "movie_reviews",
+     "vader_lexicon",
+ ])
+
+import pandas as pd
+import warnings
+warnings.filterwarnings('ignore')
+
+#enter the csv file of the comment to analyze
+df = pd.read_csv("comment_01.csv")
+df.drop(index=df.index[0], axis=0, inplace=True)
+# df = df_old.iloc[1:]
+df.head()
+
+def get_tokens(doc):
     
-top_posts = pd.DataFrame(posts_dict)
-top_posts
+    # case normalization 
+    doc = doc.lower()
+    
+    # tokenization 
+    tokens = nltk.word_tokenize(doc)
+    
+    # non-word token removal 
+    tokens2 = [token for token in tokens if token.isalpha()]
+
+    # stopwords removal 
+    stopwords = nltk.corpus.stopwords.words("english")
+    tokens3 = [token for token in tokens2 if token not in stopwords]
+    
+    # word stemming 
+    porter = nltk.PorterStemmer()
+    tokens4 = [porter.stem(token) for token in tokens3]
+    
+    return tokens4
+
+df['comment_tokens'] = df["comment"].apply(get_tokens)
+
+all_comment_tokens = []
+
+for lst in df["comment_tokens"].tolist():
+    all_comment_tokens += lst
+    
+freq_comment = nltk.FreqDist(all_comment_tokens)
+
+#sort the frequency list in descending order
+sorted_freq_comment = sorted(freq_comment.items(),key = lambda k:k[1], reverse = True)
+
+sorted_freq_comment
+freq_comment
+
+freq_comment.plot(30)
+
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+def gen_wordcloud(all_tokens):
+    words = " ".join(all_tokens)
+    wordcloud = WordCloud(width = 800, height = 800,
+                    background_color ='white',
+                    min_font_size = 10).generate(words)                     
+    plt.figure(figsize = (8, 8), facecolor = None)
+    plt.imshow(wordcloud)
+    plt.axis("off")
+    plt.tight_layout(pad = 0)
+    plt.show()
+
+gen_wordcloud(all_comment_tokens)
+
+from nltk.sentiment import SentimentIntensityAnalyzer
+sia = SentimentIntensityAnalyzer()
+
+def gen_sentiment(doc):
+    score = sia.polarity_scores(doc)["compound"]
+    return score
+    
+df['summary_comment_score'] = df["comment"].apply(gen_sentiment)
+
+pos_text_df = df[df["summary_comment_score"]>0]
+neg_text_df = df[df["summary_comment_score"]<=0]
+
+print(len(pos_text_df))
+print(len(neg_text_df))
